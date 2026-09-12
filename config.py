@@ -2,47 +2,92 @@
 config.py
 ---------
 Central configuration for the whole app.
-Loads secrets/settings from a `.env` file so nothing sensitive is hard-coded.
 
-Copy `.env.example` to `.env` and fill in your real values before running.
+Locally, values come from a `.env` file (never commit `.env`).
+On Streamlit Community Cloud, the same keys are read from App secrets.
 """
 
 import os
 from urllib.parse import quote_plus
+
 from dotenv import load_dotenv
 
-# Load variables from .env into environment
 load_dotenv()
 
 
+def _get(key: str, default: str = "") -> str:
+    """Prefer process env, then Streamlit secrets. Never hard-code credentials."""
+    value = os.getenv(key)
+    if value not in (None, ""):
+        return value
+    try:
+        import streamlit as st
+
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    return default
+
+
 class Config:
-    # ---------------- MySQL ----------------
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = int(os.getenv("DB_PORT", 3306))
-    DB_USER = os.getenv("DB_USER", "root")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-    DB_NAME = os.getenv("DB_NAME", "cricbuzz_livestats")
+    @property
+    def DB_HOST(self) -> str:
+        return _get("DB_HOST", "localhost")
 
-    # SQLAlchemy connection string (mysql-connector-python driver)
-    SQLALCHEMY_URI = (
-        f"mysql+mysqlconnector://{quote_plus(DB_USER)}:{quote_plus(DB_PASSWORD)}"
-        f"@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    )
+    @property
+    def DB_PORT(self) -> int:
+        raw = _get("DB_PORT", "3306")
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 3306
 
-    # ---------------- Cricbuzz API (RapidAPI) ----------------
-    RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
-    RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "cricbuzz-cricket.p.rapidapi.com")
-    BASE_URL = f"https://{RAPIDAPI_HOST}"
+    @property
+    def DB_USER(self) -> str:
+        return _get("DB_USER", "root")
 
-    HEADERS = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": RAPIDAPI_HOST,
-    }
+    @property
+    def DB_PASSWORD(self) -> str:
+        return _get("DB_PASSWORD", "")
 
-    # ---------------- App ----------------
+    @property
+    def DB_NAME(self) -> str:
+        return _get("DB_NAME", "cricbuzz_livestats")
+
+    @property
+    def DB_SSL(self) -> bool:
+        return _get("DB_SSL", "false").strip().lower() in ("1", "true", "yes")
+
+    @property
+    def SQLALCHEMY_URI(self) -> str:
+        return (
+            f"mysql+mysqlconnector://{quote_plus(self.DB_USER)}:{quote_plus(self.DB_PASSWORD)}"
+            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        )
+
+    @property
+    def RAPIDAPI_KEY(self) -> str:
+        return _get("RAPIDAPI_KEY", "")
+
+    @property
+    def RAPIDAPI_HOST(self) -> str:
+        return _get("RAPIDAPI_HOST", "cricbuzz-cricket.p.rapidapi.com")
+
+    @property
+    def BASE_URL(self) -> str:
+        return f"https://{self.RAPIDAPI_HOST}"
+
+    @property
+    def HEADERS(self) -> dict:
+        return {
+            "x-rapidapi-key": self.RAPIDAPI_KEY,
+            "x-rapidapi-host": self.RAPIDAPI_HOST,
+        }
+
     APP_TITLE = "🏏 Cricbuzz LiveStats"
-    REQUEST_TIMEOUT = 10          # seconds, for every API call
-    MAX_RETRIES = 3               # retry attempts on failed API calls
+    REQUEST_TIMEOUT = 10
+    MAX_RETRIES = 3
 
 
 config = Config()

@@ -22,10 +22,15 @@ def get_engine():
     on every Streamlit rerun.
     """
     try:
+        connect_args = {}
+        if config.DB_SSL:
+            # Cloud MySQL (Aiven / Railway public proxy) usually requires TLS.
+            connect_args["ssl_disabled"] = False
         engine = create_engine(
             config.SQLALCHEMY_URI,
             pool_pre_ping=True,   # auto-reconnect if MySQL dropped idle connection
             pool_recycle=3600,
+            connect_args=connect_args,
         )
         return engine
     except SQLAlchemyError as e:
